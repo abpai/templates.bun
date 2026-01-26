@@ -18,7 +18,8 @@
     "format": "bunx prettier --write .",
     "typecheck": "bunx tsc --noEmit",
     "check": "bun run lint && bun run typecheck",
-    "test": "bun test"
+    "test": "bun test",
+    "prepare": "husky install"
   },
   "dependencies": {},
   "devDependencies": {
@@ -29,7 +30,18 @@
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
     "prettier": "^3.7.4",
     "typescript": "^5.7.2"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,html,json,md,scss,yaml,yml}": [
+      "prettier --write"
+    ]
   }
 }
