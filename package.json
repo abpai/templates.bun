@@ -4,21 +4,25 @@
   "description": "Starter template for Bun projects with ESLint + Prettier.",
   "type": "module",
   "main": "src/index.ts",
+  "module": "src/index.ts",
   "files": [
     "src"
   ],
   "engines": {
     "bun": ">=1.1.0"
   },
+  "packageManager": "bun@1.3.3",
   "license": "MIT",
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
+    "build": "bun build ./src/index.ts --outdir ./dist",
     "lint": "bunx eslint .",
     "format": "bunx prettier --write .",
     "typecheck": "bunx tsc --noEmit",
     "check": "bun run lint && bun run typecheck",
     "test": "bun test",
+    "test:watch": "bun test --watch",
     "prepare": "husky install"
   },
   "dependencies": {},

@@ -23,6 +23,8 @@ bun run lint       # eslint
 bun run format     # prettier write
 bun run typecheck  # tsc --noEmit
 bun run test       # bun test
+ bun run test:watch # bun test --watch
+ bun run build     # bun build ./src/index.ts --outdir ./dist
 bun run check      # lint + typecheck
 ```
 
