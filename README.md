@@ -34,4 +34,4 @@ bun run check      # lint + typecheck
 
 ## Notes
 
-- After `bun install`, Bun will create `bun.lockb` (recommended to commit).
+- After `bun install`, Bun will create `bun.lock` (recommended to commit).
