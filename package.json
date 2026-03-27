@@ -1,7 +1,7 @@
 {
   "name": "templates.bun",
   "version": "0.1.0",
-  "description": "Starter template for Bun projects with ESLint + Prettier.",
+  "description": "Minimal Bun starter with TypeScript, Prettier, and tests.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -17,35 +17,16 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist",
-    "lint": "bunx eslint .",
     "format": "bunx prettier --write .",
     "typecheck": "bunx tsc --noEmit",
-    "check": "bun run lint && bun run typecheck",
+    "check": "bunx prettier --check . && bun run typecheck && bun run test",
     "test": "bun test",
-    "test:watch": "bun test --watch",
-    "prepare": "husky install"
+    "test:watch": "bun test --watch"
   },
   "dependencies": {},
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@typescript-eslint/eslint-plugin": "^8.18.0",
-    "@typescript-eslint/parser": "^8.18.0",
-    "@types/bun": "^1.1.22",
-    "eslint": "^9.39.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.4",
-    "husky": "^8.0.3",
-    "lint-staged": "^15.2.0",
-    "prettier": "^3.7.4",
-    "typescript": "^5.7.2"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{css,html,json,md,scss,yaml,yml}": [
-      "prettier --write"
-    ]
+    "@types/bun": "^1.3.11",
+    "prettier": "^3.8.1",
+    "typescript": "^6.0.2"
   }
 }
