@@ -22,6 +22,7 @@
     "typecheck": "bun x --no-install tsc --noEmit",
     "check": "bun run lint && bun run typecheck && bun run test",
     "test": "bun test",
+    "test:changed": "bun test --changed",
     "test:coverage": "bun test --coverage",
     "test:watch": "bun test --watch"
   },

@@ -31,6 +31,7 @@ bun run format        # write Prettier formatting
 bun run lint          # check Prettier formatting (cached)
 bun run typecheck     # tsc --noEmit
 bun run test          # bun test
+bun run test:changed  # only tests affected by uncommitted changes
 bun run test:coverage # bun test with coverage
 bun run test:watch    # bun test --watch
 bun run check         # lint + typecheck + test
