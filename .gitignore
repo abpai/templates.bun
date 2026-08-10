@@ -5,6 +5,8 @@ npm-debug.log*
 node_modules/
 dist/
 coverage/
+.cache/
+*.tsbuildinfo
 .npm/
 .npm-cache/
 .env
