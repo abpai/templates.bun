@@ -53,4 +53,5 @@ bun run check         # lint + typecheck + test
 
 - Commit `bun.lock` after dependency updates.
 - This starter skips ESLint. Prettier, anti-slop Oxlint, TypeScript, and Bun tests provide a small default quality gate.
-- The anti-slop plugin is vendored from `dmmulroy/anti-slop` so projects can adapt its rules locally.
+- Anti-slop is created by Dillon Mulroy in [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) and distributed under the MIT license.
+- This template vendors a pinned upstream commit so projects can adapt the rules locally. See `tools/oxlint/anti-slop/UPSTREAM.md` for provenance.
