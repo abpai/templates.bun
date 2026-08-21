@@ -18,7 +18,9 @@
     "start": "bun src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --sourcemap=linked",
     "format": "bun x --no-install prettier --write .",
-    "lint": "bun x --no-install prettier --check . --cache --cache-strategy content --cache-location .cache/prettier/.prettier-cache",
+    "lint": "bun run lint:format && bun run lint:anti-slop",
+    "lint:format": "bun x --no-install prettier --check . --cache --cache-strategy content --cache-location .cache/prettier/.prettier-cache",
+    "lint:anti-slop": "bun x --no-install oxlint .",
     "typecheck": "bun x --no-install tsc --noEmit",
     "check": "bun run lint && bun run typecheck && bun run test",
     "test": "bun test",
@@ -27,7 +29,9 @@
     "test:watch": "bun test --watch"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.79.0",
     "@types/bun": "^1.3.14",
+    "oxlint": "1.79.0",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2"
   }
