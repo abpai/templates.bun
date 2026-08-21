@@ -5,6 +5,7 @@ A reusable Bun project starter with:
 - Bun 1.3 or newer for runtime, bundling, and tests
 - TypeScript 7 with strict, incremental type checking
 - Prettier 3 with a content-based cache for fast repeat checks
+- Vendored anti-slop Oxlint rules for low-evidence TypeScript and JavaScript patterns
 - Build, test, coverage, format, and aggregate check scripts
 
 ## Quick start
@@ -28,7 +29,9 @@ bun run dev           # run with watch mode
 bun run start         # run once
 bun run build         # bundle src/index.ts to dist/
 bun run format        # write Prettier formatting
-bun run lint          # check Prettier formatting (cached)
+bun run lint          # run formatting and anti-slop checks
+bun run lint:format   # check Prettier formatting (cached)
+bun run lint:anti-slop  # reject low-evidence TypeScript and JavaScript patterns
 bun run typecheck     # tsc --noEmit
 bun run test          # bun test
 bun run test:changed  # only tests affected by uncommitted changes
@@ -42,9 +45,12 @@ bun run check         # lint + typecheck + test
 - `src/index.ts` - entry point (prints Hello, Bun!)
 - `src/index.test.ts` - Bun test example
 - `.prettierrc` - formatting rules
+- `oxlint.config.ts` - anti-slop plugin registration and rules
+- `tools/oxlint/anti-slop/` - vendored anti-slop Oxlint plugin
 - `tsconfig.json` - strict TypeScript configuration
 
 ## Notes
 
 - Commit `bun.lock` after dependency updates.
-- This starter skips ESLint. Prettier, TypeScript, and Bun tests provide a small default quality gate.
+- This starter skips ESLint. Prettier, anti-slop Oxlint, TypeScript, and Bun tests provide a small default quality gate.
+- The anti-slop plugin is vendored from `dmmulroy/anti-slop` so projects can adapt its rules locally.
