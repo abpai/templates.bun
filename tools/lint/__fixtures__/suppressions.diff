@@ -1,0 +1,33 @@
+diff --git a/src/example.ts b/src/example.ts
+index 1111111..2222222 100644
+--- a/src/example.ts
++++ b/src/example.ts
+@@ -0,0 +1,16 @@
++// SAFETY: An ordinary plugin comment is not a lint directive.
++// oxlint-disable-next-line anti-slop/no-runtime-typeof -- SAFETY: The boundary validates this value.
++typeof input === 'string'
++/* eslint-disable-line no-console, @typescript-eslint/no-explicit-any -- SAFETY: CLI output and a typed adapter are intentional. */
++console.log(input as any)
++// eslint-disable no-console -- SAFETY: File-wide suppression is not allowed.
++// oxlint-disable no-console -- SAFETY: File-wide suppression is not allowed.
++// eslint-disable-line -- SAFETY: Rules are required.
++// eslint-disable-next-line no-alert -- SAFETY:
++// eslint-disable-line no-alert
++const trailing = input as string // oxlint-disable-line anti-slop/require-safety-comment-for-type-assertion -- SAFETY: Parsed at the boundary.
++const bare = input as string // oxlint-disable-line anti-slop/require-safety-comment-for-type-assertion
++// Prose may mention a directive such as `foo() // oxlint-disable-line rule` without being one.
++const quoted = 'text // oxlint-disable-line no-console'
++const url = "https://example.com/path" // oxlint-disable-line no-console -- SAFETY: A comment after a string still counts.
++const crlf = 1 // oxlint-disable-line no-console
+diff --git a/README.md b/README.md
+index 3333333..4444444 100644
+--- a/README.md
++++ b/README.md
+@@ -0,0 +1,1 @@
++// oxlint-disable-line no-console
+diff --git a/src/my file.ts b/src/my file.ts
+new file mode 100644
+--- /dev/null
++++ b/src/my file.ts
+@@ -0,0 +1,1 @@
++// oxlint-disable-line no-console
