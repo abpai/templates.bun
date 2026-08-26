@@ -18,11 +18,22 @@ const sampleDiff = readFileSync(join(import.meta.dir, '__fixtures__', 'suppressi
     '+const crlf = 1 // oxlint-disable-line no-console\n',
     '+const crlf = 1 // oxlint-disable-line no-console\r\n',
   )
+const sampleLines = parseAddedLines(sampleDiff)
+
+function sampleSource(file: string): string {
+  return sampleLines
+    .filter((line) => line.file === file)
+    .map(
+      ({ content, line }) =>
+        `${content}${file === 'src/example.ts' && line === 16 ? '\r\n' : '\n'}`,
+    )
+    .join('')
+}
 
 describe('check-suppressions', () => {
   test('parses added lines with their new-file locations', () => {
-    const lines = parseAddedLines(sampleDiff)
-    expect(lines.filter(({ file }) => file === 'src/example.ts')).toHaveLength(16)
+    const lines = sampleLines
+    expect(lines.filter(({ file }) => file === 'src/example.ts')).toHaveLength(20)
     expect(lines[0]).toEqual({
       content: '// SAFETY: An ordinary plugin comment is not a lint directive.',
       file: 'src/example.ts',
@@ -33,7 +44,7 @@ describe('check-suppressions', () => {
   })
 
   test('accepts leading and trailing line suppressions with a rule and SAFETY reason', () => {
-    const result = inspectAddedSuppressions(parseAddedLines(sampleDiff))
+    const result = inspectAddedSuppressions(sampleLines, sampleSource)
 
     expect(result.suppressions).toEqual([
       {
@@ -60,6 +71,12 @@ describe('check-suppressions', () => {
         reason: 'A comment after a string still counts.',
         rules: ['no-console'],
       },
+      {
+        file: 'src/example.ts',
+        line: 17,
+        reason: 'The parser must inspect every comment on this line.',
+        rules: ['no-alert'],
+      },
     ])
     expect(result.violations.map((item) => `${item.file}:${item.line}: ${item.message}`)).toEqual([
       'src/example.ts:6: eslint-disable is file-level; use only -line or -next-line directives',
@@ -74,12 +91,13 @@ describe('check-suppressions', () => {
   })
 
   test('ignores prose, string contents, and non-source files', () => {
-    const result = inspectAddedSuppressions(parseAddedLines(sampleDiff))
+    const result = inspectAddedSuppressions(sampleLines, sampleSource)
     const flagged = new Set([...result.suppressions, ...result.violations].map(({ line }) => line))
 
     // Line 13 is prose mentioning a directive, line 14 quotes one inside a string.
     expect(flagged.has(13)).toBe(false)
     expect(flagged.has(14)).toBe(false)
+    expect(flagged.has(19)).toBe(false)
     expect(result.violations.some(({ file }) => file === 'README.md')).toBe(false)
   })
 
@@ -105,7 +123,10 @@ describe('check-suppressions', () => {
             'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -0,0 +1 @@\n+// oxlint-disable-line no-console -- SAFETY: Test output.\n',
         }
       },
-      (file) => `// ${file}\n// oxlint-disable-line no-alert\n`,
+      (file) =>
+        file === 'a.ts'
+          ? '// oxlint-disable-line no-console -- SAFETY: Test output.\n'
+          : `// ${file}\n// oxlint-disable-line no-alert\n`,
     )
 
     expect(commands.map((command) => command.filter((part) => part !== 'abc123'))).toEqual([

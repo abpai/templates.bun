@@ -1,16 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { appendFile } from 'node:fs/promises'
 import { extname } from 'node:path'
+import { parseSync } from 'oxc-parser'
 
 const DEFAULT_BASE = 'origin/main'
 const SAFETY_MARKER = '-- SAFETY:'
-// Oxlint honors a directive only at the start of a comment, so the check reads comment text
-// rather than whole lines. Prose that mentions a directive elsewhere is not a directive.
+// Oxlint honors a directive only at the start of a comment. The parser supplies real comments,
+// so prose, strings, and template contents that mention one are not directives.
 const DIRECTIVE_PATTERN = /^\s*((?:oxlint|eslint)-disable(?:(?:-next)?-line)?)\b(.*)$/u
-const COMMENT_OPENER = /\/\/|\/\*/u
-// Single-line string literals are blanked (same length, so indexes stay valid) so a quoted
-// comment opener cannot start a comment.
-const STRING_LITERAL = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\\n]|\\.)*`/gu
 const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
 
 // Changes to these paths alter what the lint gate enforces, so the summary calls them out.
@@ -130,18 +127,6 @@ export function parseAddedLines(diff: string): AddedLine[] {
   return addedLines
 }
 
-function fileLines(file: string, content: string): AddedLine[] {
-  return content
-    .split('\n')
-    .map((rawLine, index) => ({ content: rawLine.replace(/\r$/u, ''), file, line: index + 1 }))
-}
-
-function commentText(content: string): string | undefined {
-  const blanked = content.replace(STRING_LITERAL, (literal) => ' '.repeat(literal.length))
-  const opener = COMMENT_OPENER.exec(blanked)
-  return opener ? content.slice(opener.index + 2) : undefined
-}
-
 function ruleNames(value: string): string[] {
   return value
     .trim()
@@ -156,13 +141,8 @@ function violation(line: AddedLine, message: string): SuppressionViolation {
 
 type Inspection = { suppression: Suppression } | { violation: SuppressionViolation } | undefined
 
-function directiveMatch(line: AddedLine): RegExpExecArray | null {
-  if (!isSourceFile(line.file)) {
-    return null
-  }
-
-  const comment = commentText(line.content)
-  return comment === undefined ? null : DIRECTIVE_PATTERN.exec(comment)
+function directiveMatch(comment: string): RegExpExecArray | null {
+  return DIRECTIVE_PATTERN.exec(comment)
 }
 
 function safetyReason(rest: string, markerIndex: number): string {
@@ -177,7 +157,7 @@ function safetyReason(rest: string, markerIndex: number): string {
 }
 
 function inspectDirective(line: AddedLine): Inspection {
-  const match = directiveMatch(line)
+  const match = directiveMatch(line.content)
   if (!match) {
     return undefined
   }
@@ -210,12 +190,35 @@ function inspectDirective(line: AddedLine): Inspection {
   return { suppression: { file: line.file, line: line.line, reason, rules } }
 }
 
-/** Validates only lint directives in source files, never prose or strings that mention one. */
-export function inspectAddedSuppressions(lines: AddedLine[]): CheckResult {
+function lineAtOffset(source: string, offset: number): number {
+  return source.slice(0, offset).split('\n').length
+}
+
+function commentsOnAddedLines(lines: AddedLine[], read: FileReader): AddedLine[] {
+  const addedByFile = new Map<string, Set<number>>()
+  for (const { file, line } of lines) {
+    if (isSourceFile(file)) {
+      const added = addedByFile.get(file) ?? new Set<number>()
+      added.add(line)
+      addedByFile.set(file, added)
+    }
+  }
+
+  return [...addedByFile].flatMap(([file, added]) => {
+    const source = read(file)
+    return parseSync(file, source).comments.flatMap((comment) => {
+      const line = lineAtOffset(source, comment.start)
+      return added.has(line) ? [{ content: comment.value, file, line }] : []
+    })
+  })
+}
+
+/** Validates directives in parser-confirmed comments that start on added source lines. */
+export function inspectAddedSuppressions(lines: AddedLine[], read: FileReader): CheckResult {
   const suppressions: Suppression[] = []
   const violations: SuppressionViolation[] = []
 
-  for (const line of lines) {
+  for (const line of commentsOnAddedLines(lines, read)) {
     const inspection = inspectDirective(line)
     if (inspection && 'suppression' in inspection) {
       suppressions.push(inspection.suppression)
@@ -305,11 +308,15 @@ export function checkSuppressions(
 
   const lines = [
     ...parseAddedLines(diff),
-    ...untracked.filter(isSourceFile).flatMap((file) => fileLines(file, read(file))),
+    ...untracked.filter(isSourceFile).flatMap((file) =>
+      read(file)
+        .split('\n')
+        .map((_, index) => ({ content: '', file, line: index + 1 })),
+    ),
   ]
   const policyChanges = [...trackedPolicyChanges, ...untracked.filter(isPolicyPath)]
 
-  return { ...inspectAddedSuppressions(lines), policyChanges }
+  return { ...inspectAddedSuppressions(lines, read), policyChanges }
 }
 
 function parseBase(arguments_: string[]): string {
