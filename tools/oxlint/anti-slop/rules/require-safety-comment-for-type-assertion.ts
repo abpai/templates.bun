@@ -30,6 +30,13 @@ function hasSafetyComment(sourceCode: SourceCode, node: TypeAssertion): boolean 
     ) {
       return true;
     }
+    if (
+      current.type === "VariableDeclaration" &&
+      current.parent.type === "ExportNamedDeclaration"
+    ) {
+      current = current.parent;
+      continue;
+    }
     if (commentOwnerKinds.has(current.type) || current.parent.type === "Program") return false;
     current = current.parent;
   }
