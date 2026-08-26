@@ -1,4 +1,8 @@
-const value: unknown = 'Bun'
+declare const raw: string
 
-// SAFETY: This fixture intentionally narrows the previously widened binding.
-export const name = value as string
+const value: unknown = raw
+
+// SAFETY: The comment satisfies the safety rule so only the widen-then-assert reports.
+const name = value as string
+
+export { name }

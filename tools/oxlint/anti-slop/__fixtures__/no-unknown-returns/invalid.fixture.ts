@@ -1,3 +1,5 @@
+declare const raw: unknown
+
 export function read(): unknown {
-  return 'Bun'
+  return raw
 }

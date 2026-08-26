@@ -1,3 +1,6 @@
 declare const input: unknown
 
-export const value = input as unknown as string
+// SAFETY: The comment satisfies the safety rule so only the chained assertion reports.
+const value = input as unknown as string
+
+export { value }

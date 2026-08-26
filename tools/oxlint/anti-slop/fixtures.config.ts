@@ -1,34 +1,16 @@
 import { defineConfig } from 'oxlint'
+import policy from '../../../oxlint.config.ts'
 
-const rules: Record<
-  string,
-  | 'error'
-  | ['error', { allowInTypeGuards: boolean }]
-  | ['error', { max: number; variant: 'modified' }]
-> = {
-  'eslint/complexity': ['error', { max: 10, variant: 'modified' }],
-  'anti-slop/no-chained-type-assertions': 'error',
-  'anti-slop/no-conditional-empty-object-spread': 'error',
-  'anti-slop/no-known-value-widening': 'error',
-  'anti-slop/no-module-mocking': 'error',
-  'anti-slop/no-object-parameters': 'error',
-  'anti-slop/no-reflect-apply': 'error',
-  'anti-slop/no-reflect-get': 'error',
-  'anti-slop/no-runtime-typeof': ['error', { allowInTypeGuards: true }],
-  'anti-slop/no-shape-in-symbol-names': 'error',
-  'anti-slop/no-unknown-parameters': 'error',
-  'anti-slop/no-unknown-returns': 'error',
-  'anti-slop/no-unknown-type-aliases': 'error',
-  'anti-slop/no-unsafe-dictionary-type': 'error',
-  'anti-slop/no-widen-then-assert': 'error',
-  'anti-slop/require-safety-comment-for-type-assertion': 'error',
-}
-
+// Reuse the root policy so rule options and severities cannot drift between
+// the main scan and the fixture harness. Only the scan surface changes here.
 export default defineConfig({
-  plugins: [],
+  ...policy,
+  // Each fixture isolates one rule, so the native correctness category is off.
   categories: {
     correctness: 'off',
   },
+  // The root policy ignores this whole directory. Without this reset the
+  // harness lints zero files and several assertions still pass.
+  ignorePatterns: [],
   jsPlugins: [{ name: 'anti-slop', specifier: './index.ts' }],
-  rules,
 })

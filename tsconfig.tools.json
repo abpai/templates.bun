@@ -4,6 +4,6 @@
     "incremental": false,
     "tsBuildInfoFile": null
   },
-  "include": ["tools/**/*.ts"],
+  "include": ["oxlint.config.ts", "tools/**/*.ts"],
   "exclude": ["tools/oxlint/anti-slop/__fixtures__/**"]
 }

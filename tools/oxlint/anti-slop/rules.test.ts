@@ -1,16 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
+import policy from '../../../oxlint.config.ts'
 
-const ruleNames = [
+const hardRuleNames = [
   'no-chained-type-assertions',
-  'no-conditional-empty-object-spread',
   'no-known-value-widening',
-  'no-module-mocking',
   'no-object-parameters',
   'no-reflect-apply',
   'no-reflect-get',
-  'no-runtime-typeof',
-  'no-shape-in-symbol-names',
   'no-unknown-parameters',
   'no-unknown-returns',
   'no-unknown-type-aliases',
@@ -19,9 +16,24 @@ const ruleNames = [
   'require-safety-comment-for-type-assertion',
 ] as const
 
+const directionalRuleNames = [
+  'no-conditional-empty-object-spread',
+  'no-module-mocking',
+  'no-runtime-typeof',
+  'no-shape-in-symbol-names',
+] as const
+
+const ruleNames = [...hardRuleNames, ...directionalRuleNames]
+
+// Fixture directories that exercise policy behavior rather than one plugin rule.
+const policyFixtureNames = ['complexity', 'suppressions'] as const
+
 interface Diagnostic {
-  readonly code: string
+  // Absent for unused-directive reports, which carry no rule code.
+  readonly code?: string
   readonly filename: string
+  readonly message: string
+  readonly severity: 'error' | 'warning'
 }
 
 interface OxlintReport {
@@ -51,32 +63,76 @@ if (stdout.length === 0) {
 
 const report = JSON.parse(stdout) as OxlintReport
 
-function fixtureDiagnostics(ruleName: string, fixtureName: 'invalid' | 'valid') {
-  const suffix = [ruleName, `${fixtureName}.fixture.ts`].join('/')
+function fixtureDiagnostics(fixtureDirectory: string, fixtureName: 'invalid' | 'valid') {
+  const suffix = [fixtureDirectory, `${fixtureName}.fixture.ts`].join('/')
   return report.diagnostics.filter((diagnostic) =>
     diagnostic.filename.replaceAll('\\', '/').endsWith(suffix),
   )
 }
 
+const severities = new Map(
+  Object.entries(policy.rules ?? {}).map(([name, entry]) => [
+    name,
+    Array.isArray(entry) ? entry[0] : entry,
+  ]),
+)
+
+function severityOf(ruleName: string) {
+  return severities.get(`anti-slop/${ruleName}`)
+}
+
+describe('lint policy', () => {
+  test('hard anti-slop rules are errors', () => {
+    for (const ruleName of hardRuleNames) {
+      expect(severityOf(ruleName)).toBe('error')
+    }
+  })
+
+  test('directional anti-slop rules are warnings', () => {
+    for (const ruleName of directionalRuleNames) {
+      expect(severityOf(ruleName)).toBe('warn')
+    }
+  })
+
+  test('complexity is directional at maximum 10 with the modified switch variant', () => {
+    expect(policy.rules?.['eslint/complexity']).toEqual(['warn', { max: 10, variant: 'modified' }])
+  })
+
+  test('native correctness rules are hard and unused suppressions are errors', () => {
+    expect(policy.categories?.correctness).toBe('error')
+    expect(policy.options?.reportUnusedDisableDirectives).toBe('error')
+  })
+})
+
 describe('anti-slop Oxlint plugin', () => {
   test('runs every fixture in one Oxlint invocation', () => {
-    expect(report.number_of_files).toBe((ruleNames.length + 1) * 2)
+    expect(report.number_of_files).toBe((ruleNames.length + policyFixtureNames.length) * 2)
     expect(report.number_of_rules).toBe(ruleNames.length + 1)
   })
 
-  test('complexity uses a maximum of 10 with the modified switch variant', () => {
-    expect(fixtureDiagnostics('complexity', 'invalid').map(({ code }) => code)).toContain(
+  test('complexity reports 11 and accepts 10 under the modified switch variant', () => {
+    expect(fixtureDiagnostics('complexity', 'invalid').map(({ code }) => code)).toEqual([
       'eslint(complexity)',
-    )
+    ])
     expect(fixtureDiagnostics('complexity', 'valid')).toEqual([])
   })
 
+  test('a justified line suppression silences a hard rule', () => {
+    expect(fixtureDiagnostics('suppressions', 'valid')).toEqual([])
+  })
+
+  test('an unused suppression is reported as an error', () => {
+    const diagnostics = fixtureDiagnostics('suppressions', 'invalid')
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0]?.severity).toBe('error')
+    expect(diagnostics[0]?.message).toMatch(/unused oxlint-disable directive/iu)
+  })
+
   for (const ruleName of ruleNames) {
-    test(`${ruleName} reports only its invalid fixture`, () => {
-      const expectedCode = `anti-slop(${ruleName})`
-      expect(fixtureDiagnostics(ruleName, 'invalid').map(({ code }) => code)).toContain(
-        expectedCode,
-      )
+    test(`${ruleName} reports its invalid fixture and accepts its valid fixture`, () => {
+      expect(fixtureDiagnostics(ruleName, 'invalid').map(({ code }) => code)).toEqual([
+        `anti-slop(${ruleName})`,
+      ])
       expect(fixtureDiagnostics(ruleName, 'valid')).toEqual([])
     })
   }
