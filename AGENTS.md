@@ -1,27 +1,17 @@
-# Agent development policy
+# Repository guide
 
-This is a strongly opinionated template for agent-ready Bun projects.
-`oxlint.config.ts` is the single source of truth for lint policy.
+This is an agent-ready Bun starter. See `README.md` for the project layout and commands.
+`oxlint.config.ts` and CI own the quality policy.
 
-## Before committing
+Before handing off a change:
 
 - Run `bun run check`.
-- Run `bun run lint:ratchet` and `bun run lint:suppressions` when `origin/main` is available. Use `--base <ref>` for another target.
+- When `origin/main` is available, also run `bun run lint:ratchet` and `bun run lint:suppressions`.
 
-## Enforcement
+If a lint exception is necessary, use the smallest line-level scope and a concrete reason:
 
-- `error` rules are hard constraints and block CI.
-- `warn` rules are directional guidance. Findings must not increase per file and rule.
-- New files must have zero directional findings.
-- Do not weaken or remove a rule globally to make a change pass.
+```ts
+// oxlint-disable-next-line <full-rule-id> -- SAFETY: <reason>
+```
 
-## Exceptions
-
-- Prefer changing the design over suppressing a hard constraint.
-- For a one-off exception, use the smallest line-level scope:
-  `// oxlint-disable-next-line <rule> -- SAFETY: <invariant or reason>`
-- Never use file-level `oxlint-disable` or `eslint-disable` directives.
-- Every added disable directive must name its rule and include a nonempty `-- SAFETY:` reason.
-- Use the exact namespaced rule id, for example `anti-slop/no-unsafe-dictionary-type`. An id without the `anti-slop/` prefix suppresses nothing and CI reports it as unused.
-- CI lists every new suppression automatically. No separate PR-body list is required.
-- For a recurring boundary pattern, add a narrow `overrides` entry in `oxlint.config.ts` instead of repeated line suppressions. Explain that config override in the PR.
+Call out intentional changes to `oxlint.config.ts`, `tools/lint/`, `tools/oxlint/`, or the quality workflow for human review.
