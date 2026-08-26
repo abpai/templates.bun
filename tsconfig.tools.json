@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "tsBuildInfoFile": null
+  },
+  "include": ["tools/**/*.ts"],
+  "exclude": ["tools/oxlint/anti-slop/__fixtures__/**"]
+}

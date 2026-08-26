@@ -29,10 +29,10 @@ bun run dev           # run with watch mode
 bun run start         # run once
 bun run build         # bundle src/index.ts to dist/
 bun run format        # write Prettier formatting
-bun run lint          # run formatting and anti-slop checks
+bun run lint          # run formatting and Oxlint checks
 bun run lint:format   # check Prettier formatting (cached)
-bun run lint:anti-slop  # reject low-evidence TypeScript and JavaScript patterns
-bun run typecheck     # tsc --noEmit
+bun run lint:oxlint   # run correctness, complexity, and anti-slop rules
+bun run typecheck     # type-check application and tooling source
 bun run test          # bun test
 bun run test:changed  # only tests affected by uncommitted changes
 bun run test:coverage # bun test with coverage
