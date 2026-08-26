@@ -21,6 +21,8 @@
     "lint": "bun run lint:format && bun run lint:oxlint",
     "lint:format": "bun x --no-install prettier --check . --cache --cache-strategy content --cache-location .cache/prettier/.prettier-cache",
     "lint:oxlint": "bun x --no-install oxlint .",
+    "lint:ratchet": "bun tools/lint/ratchet.ts",
+    "lint:suppressions": "bun tools/lint/check-suppressions.ts",
     "typecheck": "bun run typecheck:app && bun run typecheck:tools",
     "typecheck:app": "bun x --no-install tsc --noEmit",
     "typecheck:tools": "bun x --no-install tsc -p tsconfig.tools.json --noEmit",

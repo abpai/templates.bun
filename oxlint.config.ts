@@ -8,6 +8,7 @@ export default defineConfig({
     correctness: 'error',
   },
   ignorePatterns: [
+    '.cache/**',
     '.agent/**',
     '.agents/**',
     '.claude/**',
