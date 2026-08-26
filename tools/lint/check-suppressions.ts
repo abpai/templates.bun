@@ -1,9 +1,28 @@
+import { readFileSync } from 'node:fs'
 import { appendFile } from 'node:fs/promises'
+import { extname } from 'node:path'
 
 const DEFAULT_BASE = 'origin/main'
 const SAFETY_MARKER = '-- SAFETY:'
-const DIRECTIVE_PATTERN =
-  /^\s*(?:\/\/|\/\*|\*)\s*((?:oxlint|eslint)-disable(?:(?:-next)?-line)?)(.*)$/u
+// Oxlint honors a directive only at the start of a comment, so the check reads comment text
+// rather than whole lines. Prose that mentions a directive elsewhere is not a directive.
+const DIRECTIVE_PATTERN = /^\s*((?:oxlint|eslint)-disable(?:(?:-next)?-line)?)\b(.*)$/u
+const COMMENT_OPENER = /\/\/|\/\*/u
+// Single-line string literals are blanked (same length, so indexes stay valid) so a quoted
+// comment opener cannot start a comment.
+const STRING_LITERAL = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\\n]|\\.)*`/gu
+const SOURCE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'])
+
+// Changes to these paths alter what the lint gate enforces, so the summary calls them out.
+const POLICY_PATHS = [
+  '.github/workflows',
+  'oxlint.config.ts',
+  'package.json',
+  'tools/lint',
+  'tools/oxlint',
+  'tsconfig.json',
+  'tsconfig.tools.json',
+]
 
 export interface AddedLine {
   file: string
@@ -25,6 +44,7 @@ export interface SuppressionViolation {
 }
 
 export interface CheckResult {
+  policyChanges: string[]
   suppressions: Suppression[]
   violations: SuppressionViolation[]
 }
@@ -36,6 +56,7 @@ interface CommandResult {
 }
 
 type CommandRunner = (arguments_: string[]) => CommandResult
+type FileReader = (file: string) => string
 
 function commandOutput(arguments_: string[]): CommandResult {
   const result = Bun.spawnSync({ cmd: ['git', ...arguments_], stderr: 'pipe', stdout: 'pipe' })
@@ -45,6 +66,10 @@ function commandOutput(arguments_: string[]): CommandResult {
     stderr: new TextDecoder().decode(result.stderr),
     stdout: new TextDecoder().decode(result.stdout),
   }
+}
+
+function readSource(file: string): string {
+  return readFileSync(file, 'utf8')
 }
 
 function gitOrThrow(arguments_: string[], run: CommandRunner): string {
@@ -57,6 +82,14 @@ function gitOrThrow(arguments_: string[], run: CommandRunner): string {
   return result.stdout
 }
 
+function isSourceFile(file: string): boolean {
+  return SOURCE_EXTENSIONS.has(extname(file))
+}
+
+function isPolicyPath(file: string): boolean {
+  return POLICY_PATHS.some((path) => file === path || file.startsWith(`${path}/`))
+}
+
 /** Extracts only added source lines and their new-file locations from a unified git diff. */
 export function parseAddedLines(diff: string): AddedLine[] {
   const addedLines: AddedLine[] = []
@@ -64,9 +97,13 @@ export function parseAddedLines(diff: string): AddedLine[] {
   let newLine = 0
   let inHunk = false
 
-  for (const line of diff.split('\n')) {
+  for (const rawLine of diff.split('\n')) {
+    // CRLF content would otherwise hide the line end from every pattern below.
+    const line = rawLine.replace(/\r$/u, '')
+
     if (line.startsWith('+++ ')) {
-      const path = line.slice(4)
+      // Git appends a tab after paths that contain spaces.
+      const path = line.slice(4).replace(/\t$/u, '')
       file = path === '/dev/null' ? undefined : path.replace(/^b\//u, '')
       continue
     }
@@ -93,6 +130,18 @@ export function parseAddedLines(diff: string): AddedLine[] {
   return addedLines
 }
 
+function fileLines(file: string, content: string): AddedLine[] {
+  return content
+    .split('\n')
+    .map((rawLine, index) => ({ content: rawLine.replace(/\r$/u, ''), file, line: index + 1 }))
+}
+
+function commentText(content: string): string | undefined {
+  const blanked = content.replace(STRING_LITERAL, (literal) => ' '.repeat(literal.length))
+  const opener = COMMENT_OPENER.exec(blanked)
+  return opener ? content.slice(opener.index + 2) : undefined
+}
+
 function ruleNames(value: string): string[] {
   return value
     .trim()
@@ -107,14 +156,36 @@ function violation(line: AddedLine, message: string): SuppressionViolation {
 
 type Inspection = { suppression: Suppression } | { violation: SuppressionViolation } | undefined
 
+function directiveMatch(line: AddedLine): RegExpExecArray | null {
+  if (!isSourceFile(line.file)) {
+    return null
+  }
+
+  const comment = commentText(line.content)
+  return comment === undefined ? null : DIRECTIVE_PATTERN.exec(comment)
+}
+
+function safetyReason(rest: string, markerIndex: number): string {
+  if (markerIndex === -1) {
+    return ''
+  }
+
+  return rest
+    .slice(markerIndex + SAFETY_MARKER.length)
+    .replace(/\*\/\s*$/u, '')
+    .trim()
+}
+
 function inspectDirective(line: AddedLine): Inspection {
-  const match = DIRECTIVE_PATTERN.exec(line.content)
+  const match = directiveMatch(line)
   if (!match) {
     return undefined
   }
 
-  const [, directive = '', rest = ''] = match
-  if (!directive.endsWith('-line') && !directive.endsWith('-next-line')) {
+  const directive = match[1] ?? ''
+  const rest = match[2] ?? ''
+  // Both -line and -next-line end in "-line"; anything else is file-level.
+  if (!directive.endsWith('-line')) {
     return {
       violation: violation(
         line,
@@ -129,13 +200,7 @@ function inspectDirective(line: AddedLine): Inspection {
     return { violation: violation(line, `${directive} must name at least one rule`) }
   }
 
-  const reason =
-    markerIndex === -1
-      ? ''
-      : rest
-          .slice(markerIndex + SAFETY_MARKER.length)
-          .replace(/\*\/\s*$/u, '')
-          .trim()
+  const reason = safetyReason(rest, markerIndex)
   if (!reason) {
     return {
       violation: violation(line, `${directive} must include a nonempty ${SAFETY_MARKER} reason`),
@@ -145,7 +210,7 @@ function inspectDirective(line: AddedLine): Inspection {
   return { suppression: { file: line.file, line: line.line, reason, rules } }
 }
 
-/** Validates only lint directives, never ordinary comments that happen to contain SAFETY:. */
+/** Validates only lint directives in source files, never prose or strings that mention one. */
 export function inspectAddedSuppressions(lines: AddedLine[]): CheckResult {
   const suppressions: Suppression[] = []
   const violations: SuppressionViolation[] = []
@@ -159,12 +224,12 @@ export function inspectAddedSuppressions(lines: AddedLine[]): CheckResult {
     }
   }
 
-  return { suppressions, violations }
+  return { policyChanges: [], suppressions, violations }
 }
 
-export function summaryMarkdown(suppressions: Suppression[]): string {
+function suppressionsMarkdown(suppressions: Suppression[]): string[] {
   if (suppressions.length === 0) {
-    return ''
+    return []
   }
 
   const rows = suppressions.map(
@@ -179,22 +244,45 @@ export function summaryMarkdown(suppressions: Suppression[]): string {
     '| --- | --- | --- |',
     ...rows,
     '',
-  ].join('\n')
+  ]
+}
+
+function policyChangesMarkdown(policyChanges: string[]): string[] {
+  if (policyChanges.length === 0) {
+    return []
+  }
+
+  return ['## Lint policy files changed', '', ...policyChanges.map((file) => `- ${file}`), '']
+}
+
+export function summaryMarkdown(
+  result: Pick<CheckResult, 'policyChanges' | 'suppressions'>,
+): string {
+  const lines = [
+    ...suppressionsMarkdown(result.suppressions),
+    ...policyChangesMarkdown(result.policyChanges),
+  ]
+  return lines.length === 0 ? '' : lines.join('\n')
 }
 
 export async function appendStepSummary(
   summaryPath: string | undefined,
-  suppressions: Suppression[],
+  result: Pick<CheckResult, 'policyChanges' | 'suppressions'>,
 ): Promise<void> {
-  const summary = summaryMarkdown(suppressions)
+  const summary = summaryMarkdown(result)
   if (summaryPath && summary) {
     await appendFile(summaryPath, `${summary}\n`)
   }
 }
 
+/**
+ * Compares the working tree (tracked changes plus untracked files) with the merge base, the
+ * same scope the ratchet uses, so a local run sees exactly what CI will see after a commit.
+ */
 export function checkSuppressions(
   base = DEFAULT_BASE,
   run: CommandRunner = commandOutput,
+  read: FileReader = readSource,
 ): CheckResult {
   const mergeBase = gitOrThrow(['merge-base', base, 'HEAD'], run).trim()
   if (!mergeBase) {
@@ -202,15 +290,34 @@ export function checkSuppressions(
   }
 
   const diff = gitOrThrow(
-    ['diff', '--no-ext-diff', '--unified=0', `${mergeBase}...HEAD`, '--'],
+    ['-c', 'core.quotePath=false', 'diff', '--no-ext-diff', '--unified=0', mergeBase, '--'],
     run,
   )
-  return inspectAddedSuppressions(parseAddedLines(diff))
+  const trackedPolicyChanges = gitOrThrow(
+    ['diff', '--name-only', mergeBase, '--', ...POLICY_PATHS],
+    run,
+  )
+    .split('\n')
+    .filter(Boolean)
+  const untracked = gitOrThrow(['ls-files', '--others', '--exclude-standard', '-z'], run)
+    .split('\0')
+    .filter(Boolean)
+
+  const lines = [
+    ...parseAddedLines(diff),
+    ...untracked.filter(isSourceFile).flatMap((file) => fileLines(file, read(file))),
+  ]
+  const policyChanges = [...trackedPolicyChanges, ...untracked.filter(isPolicyPath)]
+
+  return { ...inspectAddedSuppressions(lines), policyChanges }
 }
 
 function parseBase(arguments_: string[]): string {
   if (arguments_.length === 0) {
     return DEFAULT_BASE
+  }
+  if (arguments_.length === 1 && arguments_[0]?.startsWith('--base=')) {
+    return arguments_[0].slice('--base='.length)
   }
   if (arguments_.length === 2 && arguments_[0] === '--base' && arguments_[1]) {
     return arguments_[1]
@@ -221,7 +328,7 @@ function parseBase(arguments_: string[]): string {
 
 async function main(): Promise<void> {
   const result = checkSuppressions(parseBase(Bun.argv.slice(2)))
-  await appendStepSummary(Bun.env.GITHUB_STEP_SUMMARY, result.suppressions)
+  await appendStepSummary(Bun.env.GITHUB_STEP_SUMMARY, result)
 
   if (result.violations.length > 0) {
     console.error(`Lint suppression check failed (${result.violations.length}):`)
@@ -236,5 +343,10 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  await main()
+  try {
+    await main()
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
 }

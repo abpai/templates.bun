@@ -194,8 +194,9 @@ function copyHeadPolicy(repoRoot: string, baseWorktree: string): void {
 
 function baseWorktreePath(repoRoot: string): string {
   const repository = resolve(repoRoot)
-  const baseWorktree = resolve(repository, '.cache', 'ratchet-base')
-  if (relative(repository, baseWorktree) !== '.cache/ratchet-base') {
+  // Unique per process so concurrent runs cannot remove each other's worktree mid-scan.
+  const baseWorktree = resolve(repository, '.cache', `ratchet-base-${process.pid}`)
+  if (!relative(repository, baseWorktree).startsWith('.cache/ratchet-base-')) {
     throw new Error('Ratchet base worktree must remain inside the repository')
   }
   return baseWorktree
@@ -279,14 +280,16 @@ function reportNewWarnings(
   return failures
 }
 
-function assertBaseToolsAreClean(report: OxlintReport, baseWorktree: string): void {
-  const toolDiagnostics = scanDiagnostics(report, baseWorktree).filter(({ file }) =>
-    file.startsWith('tools/'),
+// The copied plugin directory must stay ignored by the policy. A diagnostic under it means
+// the base scan is linting the plugin source, which would corrupt the comparison.
+function assertBasePluginIsIgnored(report: OxlintReport, baseWorktree: string): void {
+  const pluginDiagnostics = scanDiagnostics(report, baseWorktree).filter(({ file }) =>
+    file.startsWith('tools/oxlint/'),
   )
-  if (toolDiagnostics.length === 0) return
+  if (pluginDiagnostics.length === 0) return
 
-  const details = toolDiagnostics.map(({ file, rule }) => `- ${file} [${rule}]`).join('\n')
-  throw new Error(`Base scan must have zero diagnostics under tools/:\n${details}`)
+  const details = pluginDiagnostics.map(({ file, rule }) => `- ${file} [${rule}]`).join('\n')
+  throw new Error(`Base scan must have zero diagnostics under tools/oxlint/:\n${details}`)
 }
 
 function collectChangedPaths(
@@ -339,7 +342,7 @@ export function runRatchet(options: RatchetOptions = {}): RatchetResult {
   prepareBaseWorktree(run, repoRoot, mergeBase, baseWorktree)
   try {
     const baseReport = runOxlint(run, oxlintPath, baseWorktree, 'Base')
-    assertBaseToolsAreClean(baseReport, baseWorktree)
+    assertBasePluginIsIgnored(baseReport, baseWorktree)
     const headReport = runOxlint(run, oxlintPath, repoRoot, 'HEAD')
     const changed = collectChangedPaths(run, repoRoot, mergeBase, baseWorktree)
     assertNoNewWarnings(changed, baseReport, baseWorktree, headReport, repoRoot)
